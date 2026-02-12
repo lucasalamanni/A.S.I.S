@@ -1,0 +1,104 @@
+---
+title: "2022 Vitales"
+author: "Lucas Alamanni"
+date: "2024-08-29"
+output: html_document
+---
+# Este script pretende aplicar cálculos epidemiológicos básicos de mortalidad a una base de datos. Específicamente se trabaja sobre datos obtenidos de la Municipalidad de Villa Gobernador Gálvez (Rosario). Los mismos son en su archivo original una planilla de excel con datos desagregados por sexo y grupo etáreo sobre causas específicas de mortalidad en la población de dicha ciudad. Ya que se cuenta con datos del 2022 y del 2023, este documento planea ser un código aplicable a bases de datos del mismo estilo para poder automatizar su análisis.
+
+## Comenzando: abriendo el dataset original.
+Como es común en el trabajo con fuentes epidemiológicas, estas no están inmediatamente adecuadas a su trabajo en R. Así se veía el archivo .xls original.
+
+```{r}
+library(readxl)
+```
+```{r}
+archivo_original <- read_xlsx("DATA/Vitales 2022 VGG.xlsx")
+```
+```{r}
+head(archivo_original)
+```
+
+El problema se debe a principalmente dos cuestiones. En primer lugar, en la misma hoja de excel se constuyeron 4 tablas cuyos nombres son: 1)''Nacido vivo según sexo al nacer. Localidad de Villa Gdor. Gávez. Departamento Rosario. Año 2022'', 2)''Defunciones mayores según sexo, edad y causa. Localidad de Villa Gdor. Gálvez. Departamento Rosario. Año 2022'', 3)''Defunciones menores según sexo, edad y causa. Localidad de Villa Gdor. Gálvez. Departamento Rosario. Año 2022'' y 4)''Defunciones fetales según sexo, edad y causa. Localidad de Villa Gdor. Gálvez. Departamento Rosario. Año 2022''
+Por otro lado, la presencia de NA en el recuadro anterior refleja que en dichas tablas la ausencia de muerte por causa específica no se contabilizó con el número cero sino sin poner información en dicha celda. En estas condiciones la tabla original no está apta para el trabajo en R.
+
+## Ordenando el data set original
+De las 4 tablas, la que nos genera mayor interés es 2)''Defunciones mayores según sexo, edad y causa. Localidad de Villa Gdor. Gálvez. Departamento Rosario. Año 2022'', que además es la que tiene mayor cantidad de datos. Luego de algunas correciones donde los na son transformados en 0 y donde se corrige el nombre de las categorías para evitar inconvenientes queda el siguiente dataframe.
+```{r}
+corregido_vitales_2022 <- read_xlsx("DATA/corregido_2022_vitales.xlsx")
+```
+```{r}
+head(corregido_vitales_2022)
+```
+
+En este data set, se borró la columna del nombre del código CIE, pero cada una de esas notaciones responde a una enfermedad puntual clasificada en la ''Clasificación internacional de las enfermedades'' como una causa específica de muerte de 1 o más habitantes de Villa Gobernador Gálvez.
+
+## Explorando el tipo de variables.
+Lógicamente, lo deseable sería que ''cie_codigo'' fuese una variable factor y que las 22 restantes fuesesn variables numéricas ya que son conteos de fallecimientos por una causa determinada. Para fijarnos eso haremos:
+```{r}
+str(corregido_vitales_2022)
+```
+Para cambiar el cie_codigo de character a factor hacemos:
+```{r}
+library(tidyverse)
+```
+
+```{r}
+corregido_vitales_2022 <- mutate(corregido_vitales_2022 , cie_codigo=as.factor(cie_codigo))
+```
+```{r}
+str(corregido_vitales_2022)
+```
+
+## Subtotales de cada columna.
+Como información valiosa, los subtotales calculados en la tabla orignial de excel se perdieron al realizar la transformación a R. Sería conveniente retomar esta información ya que nos habla de en que rangos etáreos está contenida la mayor cantidad de muertes.
+
+```{r}
+colSums(corregido_vitales_2022  [ , setdiff(names(corregido_vitales_2022 ),
+                                        "cie_codigo") ] )
+```
+
+El grupo más afectado son los varones mayores de 50 años seguido por las mujeres del mismo rango etáreo.
+
+## Subtotales de cada fila.
+También es de suma importancia conocer la prevalencia de cada enfermedad para poder calcular tasas de mortalidad.
+```{r}
+library(dplyr)
+```
+ 
+```{r}
+subtotal_rows <- corregido_vitales_2022  %>% 
+  select(-cie_codigo) %>% 
+  rowSums(na.rm = TRUE)
+```
+ 
+Agregarla al data frame
+
+
+```{r}
+corregido_vitales_2022  <- cbind(corregido_vitales_2022, subtotal = subtotal_rows)
+```
+
+Con esta información podemos tener datos ordenados sobre las enfermedades de mayor letalidad en la zona. Por ejemplo podemos saber las 5 mayores.
+
+```{r}
+corregido_vitales_2022  %>% 
+  top_n(10,subtotal) %>% 
+  select(cie_codigo, subtotal)
+```
+
+```{r}
+mayor_prevalencia <- corregido_vitales_2022  %>% 
+  arrange(desc(subtotal))
+```
+
+
+```{r}
+grafico_ordenado <- select(mayor_prevalencia,cie_codigo,subtotal)
+```
+```{r}
+head(grafico_ordenado, 10)
+```
+
+```
+
